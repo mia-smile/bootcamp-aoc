@@ -9,7 +9,9 @@
 (defn sum-input [input]
   (reduce + input))
 
-(println (sum-input sample-input))
+(comment
+  (println (sum-input sample-input))
+)
 
 ;; 파트 2
 ;; 주어진 입력의 숫자를 더할 때 마다 나오는 숫자 중, 처음으로 두번 나오는 숫자를 리턴하시오.
@@ -27,4 +29,6 @@
         new-sum
         (recur new-sum (conj seen new-sum) (rest next))))))
 
-(print (find-first-duplicate sample-input2))
+(comment
+  (println (find-first-duplicate sample-input2))
+)
