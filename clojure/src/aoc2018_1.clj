@@ -22,12 +22,12 @@
 
 (defn find-first-duplicate [input]
   (loop [sum 0
-         seen #{0}
+         seen? #{}
          next (cycle input)]
     (let [new-sum (+ sum (first next))]
-      (if (contains? seen new-sum)
+      (if (seen? new-sum)
         new-sum
-        (recur new-sum (conj seen new-sum) (rest next))))))
+        (recur new-sum (conj seen? new-sum) (rest next))))))
 
 (comment
   (println (find-first-duplicate sample-input2))
