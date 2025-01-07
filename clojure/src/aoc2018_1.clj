@@ -20,15 +20,37 @@
 
 (def sample-input2 [+3 +3 +4 -2 -4])
 
-(defn find-first-duplicate [input]
-  (loop [sum 0
-         seen? #{}
-         next (cycle input)]
-    (let [new-sum (+ sum (first next))]
-      (if (seen? new-sum)
-        new-sum
-        (recur new-sum (conj seen? new-sum) (rest next))))))
+;; (defn find-first-duplicate [input]
+;;   (loop [sum 0
+;;          seen? #{}
+;;          next (cycle input)]
+;;     (let [new-sum (+ sum (first next))]
+;;       (if (seen? new-sum)
+;;         new-sum
+;;         (recur new-sum (conj seen? new-sum) (rest next))))))
+
+;; (comment
+;;   (println (find-first-duplicate sample-input2))
+;; )
+
+(defn parse-input [input]
+  (cycle input))
+
+(defn process-data [input]
+  (reduce
+   (fn [[seen? sum] n]
+     (let [new-sum (+ sum n)]
+       (if (contains? seen? new-sum)
+         (reduced new-sum)
+         [(conj seen? new-sum) new-sum])))
+   [#{} 0]
+   input))
+
+(defn print-result [result]
+  (println "First duplicate sum:" result))
 
 (comment
-  (println (find-first-duplicate sample-input2))
-)
+  (let [parsed-input (parse-input sample-input2)
+      result (process-data parsed-input)]
+  (print-result result))
+  )
