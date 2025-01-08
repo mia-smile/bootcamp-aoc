@@ -40,7 +40,7 @@
   (reduce
    (fn [[seen? sum] n]
      (let [new-sum (+ sum n)]
-       (if (contains? seen? new-sum)
+       (if (seen? new-sum)
          (reduced new-sum)
          [(conj seen? new-sum) new-sum])))
    [#{} 0]
