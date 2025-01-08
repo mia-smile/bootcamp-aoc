@@ -34,17 +34,12 @@
 (defn get-matrix
   "주어진 입력을 격자로 변환한 좌표 리스트를 반환한다."
   [input]
-  (let [coord (re-matches exp input)]
-    (if coord
-      (let [id (Integer/parseInt (second coord))
-            x (Integer/parseInt (nth coord 2))
-            y (Integer/parseInt (nth coord 3))
-            w (Integer/parseInt (nth coord 4))
-            h (Integer/parseInt (nth coord 5))] 
-        {id (for [i (range x (+ x w))
-              j (range y (+ y h))] 
+  (when-let [coord (re-matches exp input)]
+      (let [[_ id x y w h] (mapv #(Integer/parseInt %) (rest coord))]
+        {id (for [i (range x (+ x w)) ;; recur
+                  j (range y (+ y h))] 
               [i,j])})
-      nil)))
+      ))
 
 (defn get-all-coords
   "주어진 입력을 격자로 변환한 좌표 리스트를 반환한다."
@@ -53,6 +48,8 @@
     (map get-matrix)
     (mapcat vals)
     (apply concat)))
+
+;; (apply concat (mapcat vals (map get-matrix input)))
 
 (defn count-overlap
   "주어진 격자에서 겹치는 부분의 갯수를 반환한다."
@@ -76,13 +73,12 @@
   (let [matrix_overlab (frequencies (get-all-coords input))
         single-points (keys (filter #(= (second %) 1) matrix_overlab))
         matrixies (map get-matrix input)]
-    (loop [next matrixies]
-      (if (empty? next)
-        nil
-        (if (set/subset? (set (first (vals (first next)))) (set single-points))
-          (first next) 
-          (recur (rest next)))))))
+    (loop [[f & remaining] matrixies]
+      (when (some? f)
+        (if (set/subset? (set (first (vals f))) (set single-points))
+          f
+          (recur remaining))))))
 
 (comment
-    (println (find-independent-id sample-input))
+    (println (find-independent-id (read-resource "day3.sample.txt")))
     )
