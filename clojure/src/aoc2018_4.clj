@@ -56,7 +56,6 @@
 
 (def log-format #"\[(\d+)-(\d+)-(\d+) (\d+):(\d+)\] (.+)")
 
-
 (defn parse-line
   "주어진 로그 라인을 파싱하여 해시맵으로 리턴한다.
    ({:year 1518, :month 11, :day 1, :hour 0, :minute 0, :action \"Guard #10 begins shift\"}
@@ -85,10 +84,13 @@
      :minute (parse-long minute)
      :action action}))
 
-(defn parse-log
+(defn parse-and-sort-log
   "주어진 로그 리스트를 파싱하여 각 라인을 해시맵 리스트로 변환한다."
   [log]
-  (map parse-line log))
+  (->> log
+       (map parse-line)
+       (sort-by (fn [{:keys [year month day hour minute]}]
+                    [year month day minute hour]))))
 
 (defn extract-guard-id
   "로그의 :action 필드에서 Guard ID를 추출한다."
@@ -150,7 +152,7 @@
     (* guard-id minute)))
 
 (comment
-  (let [parsed-log (parse-log sample-log)
+  (let [parsed-log (parse-and-sort-log sample-log)
         sleep-data (calculate-sleep-data parsed-log)
         longest-sleeping-guard (find-longest-sleeping-guard sleep-data)]
     (println (print-result longest-sleeping-guard))))
@@ -158,7 +160,7 @@
 (comment
   (println (-> "day4.sample.txt"
                read-resource
-               parse-log
+               parse-and-sort-log
                calculate-sleep-data
                find-longest-sleeping-guard
                print-result)))
