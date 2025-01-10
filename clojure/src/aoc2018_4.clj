@@ -84,13 +84,18 @@
      :minute (parse-long minute)
      :action action}))
 
-(defn parse-and-sort-log
+(defn parse-log
   "주어진 로그 리스트를 파싱하여 각 라인을 해시맵 리스트로 변환한다."
-  [log]
-  (->> log
-       (map parse-line)
-       (sort-by (fn [{:keys [year month day hour minute]}]
-                    [year month day minute hour]))))
+  [logs]
+  (->> logs
+       (map parse-line)))
+
+(defn sort-log
+  "주어진 로그 리스트를 정렬한다."
+  [logs]
+  (sort-by (fn [{:keys [year month day hour minute]}]
+             [year month day minute hour])
+           logs))
 
 (defn extract-guard-id
   "로그의 :action 필드에서 Guard ID를 추출한다."
@@ -98,72 +103,104 @@
   (when-let [[_ id] (re-find #"Guard #(\d+)" (:action log))]
     (parse-long id)))
 
+(defn compose-logs-by-guard
+  "로그 리스트를 가드별로 묶어서 해시맵으로 리턴한다.
+   {10 [{:year 1518, :month 11, :day 1, :hour 0, :minute 0, :action \"Guard #10 begins shift\"}
+        {:year 1518, :month 11, :day 1, :hour 0, :minute 5, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 1, :hour 0, :minute 25, :action \"wakes up\"}
+        {:year 1518, :month 11, :day 1, :hour 0, :minute 30, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 1, :hour 0, :minute 55, :action \"wakes up\"}
+        {:year 1518, :month 11, :day 3, :hour 0, :minute 5, :action \"Guard #10 begins shift\"}
+        {:year 1518, :month 11, :day 3, :hour 0, :minute 24, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 3, :hour 0, :minute 29, :action \"wakes up\"}],
+    99 [{:year 1518, :month 11, :day 1, :hour 23, :minute 58, :action \"Guard #99 begins shift\"}
+        {:year 1518, :month 11, :day 2, :hour 0, :minute 40, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 2, :hour 0, :minute 50, :action \"wakes up\"}
+        {:year 1518, :month 11, :day 4, :hour 0, :minute 2, :action \"Guard #99 begins shift\"}
+        {:year 1518, :month 11, :day 4, :hour 0, :minute 36, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 4, :hour 0, :minute 46, :action \"wakes up\"}
+        {:year 1518, :month 11, :day 5, :hour 0, :minute 3, :action \"Guard #99 begins shift\"}
+        {:year 1518, :month 11, :day 5, :hour 0, :minute 45, :action \"falls asleep\"}
+        {:year 1518, :month 11, :day 5, :hour 0, :minute 55, :action \"wakes up\"}]}"
+  [logs]
+  (loop [remaining-logs logs
+         current-guard nil
+         result {}]
+    (if (empty? remaining-logs)
+      result
+      (let [log (first remaining-logs)
+            new-guard (extract-guard-id log)
+            guard-id (or new-guard current-guard)]
+        (when guard-id
+          (recur (rest remaining-logs)
+                 guard-id
+                 (update result guard-id #(conj (or % []) log))))))))
+
 (defn calculate-sleep-data
-  "가드별로 잠든 구간과 총 잠든 시간을 계산한다."
-  [parsed-logs]
+  "한 명의 가드 로그를 받아 수면 데이터를 계산한다.
+  {:periods [[5 25] [30 55]], :total-sleep-time 45, :status \"w\"}"
+  [guard-logs]
   (reduce
    (fn [result log]
      (let [action (:action log)
            minute (:minute log)
-           guard-id (or (extract-guard-id log) (:current-guard result))]
-       (cond
-         ;; Guard begins shift
-         (some? (extract-guard-id log))
-         (assoc result :current-guard guard-id)
+           status (:status result)]
+       (case [status action]
+         ;; 깨어있는 상태에서 잠드는 경우
+         ["w" "falls asleep"]
+         (assoc result :start minute :status "f")
 
-         ;; falls asleep
-         (= action "falls asleep")
-         (assoc result :start minute)
-
-         ;; wakes up
-         (and (= action "wakes up") (:start result))
-         (let [start (:start result)]
+         ;; 잠든 상태에서 깨어나는 경우
+         ["f" "wakes up"]
+         (if-let [start (:start result)]
            (-> result
-               ;; 가드 ID에 대한 초기화
-               (update-in [:guards guard-id] #(or % {:periods [] :total-sleep-time 0}))
-               (update-in [:guards guard-id :periods] conj [start minute])
-               (update-in [:guards guard-id :total-sleep-time] + (- minute start))
-               (dissoc :start)))
+               (update :periods conj [start minute])
+               (update :total-sleep-time + (- minute start))
+               (assoc :status "w")
+               (dissoc :start))
+           result)
 
-         ;; 기본 처리
-         :else result)))
-   {:guards {} :current-guard nil}
-   parsed-logs))
+         ;; 그 외의 경우 상태 유지
+         result)))
+   {:periods [] :total-sleep-time 0 :status "w"}
+   guard-logs))
+
+(defn calculate-sleep-data-by-guard
+  "가드별로 수면 데이터를 계산한다.
+   {10 {:periods [[5 25] [30 55]], :total-sleep-time 45, :status \"w\"},
+    99 {:periods [[40 50]], :total-sleep-time 10, :status \"w\"}}"
+  [logs-by-guard]
+  (into {} (map (fn [[guard-id logs]]
+                  [guard-id (calculate-sleep-data logs)]) 
+                logs-by-guard)))
 
 (defn find-longest-sleeping-guard
   "가장 오랜 시간 잠든 가드의 ID와 데이터를 반환한다."
   [sleep-data]
-  (apply max-key (comp :total-sleep-time val) (:guards sleep-data)))
+  (apply max-key (comp :total-sleep-time val) (into {} sleep-data)))
 
-(defn find-most-frequent-sleep_minute
+(defn find-most-frequent-sleep-minute
   "가장 빈번하게 잠든 시간대를 찾는다."
-  [guard] 
-   (->> (:periods guard)
-        (map (fn [[start end]] (range start end)))
-        (apply concat)
-        frequencies
-        (apply max-key val)
-        key))
-
-(defn print-result
-  "결과를 출력한다."
-  [[guard-id guard-data]]
-  (let [minute (find-most-frequent-sleep_minute guard-data)]
-    (* guard-id minute)))
+  [{:keys [periods]}]
+  (->> periods
+       (map (fn [[start end]] (range start end)))
+       (apply concat)
+       (frequencies)
+       (apply max-key val)
+       key))
 
 (comment
-  (let [parsed-log (parse-and-sort-log sample-log)
-        sleep-data (calculate-sleep-data parsed-log)
-        longest-sleeping-guard (find-longest-sleeping-guard sleep-data)]
-    (println (print-result longest-sleeping-guard))))
-
-(comment
-  (println (-> "day4.sample.txt"
-               read-resource
-               parse-and-sort-log
-               calculate-sleep-data
-               find-longest-sleeping-guard
-               print-result)))
+  (println
+   (->> "day4.sample.txt"
+        (read-resource)
+        (parse-log)
+        (sort-log)
+        (compose-logs-by-guard)
+        (calculate-sleep-data-by-guard)
+        (find-longest-sleeping-guard)
+        ((fn [[guard-id guard-data]]
+           (->> (find-most-frequent-sleep-minute guard-data)
+                (* guard-id)))))))
 
 ;; 파트 2
 ;; 주어진 분(minute)에 가장 많이 잠들어 있던 가드의 ID과 그 분(minute)을 곱한 값을 구하라.
