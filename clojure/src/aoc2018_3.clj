@@ -27,58 +27,82 @@
 
 (def exp #"#(\d+) @ (\d+),(\d+): (\d+)x(\d+)")
 
-(def sample-input ["#1 @ 1,3: 4x4"
-                   "#2 @ 3,1: 4x4"
-                   "#3 @ 5,5: 2x2"])
+(defn get-area
+  "claim 을 ID와 좌표 정보로 변환한다."
+  [claim]
+  (when-let [[_ id x y w h] (re-matches exp claim)]
+    {:id (parse-long id)
+     :coords {:x (parse-long x)
+              :y (parse-long y)
+              :w (parse-long w)
+              :h (parse-long h)}}))
 
-(defn get-matrix
-  "주어진 입력을 격자로 변환한 좌표 리스트를 반환한다."
-  [input]
-  (when-let [coord (re-matches exp input)]
-      (let [[_ id x y w h] (mapv #(Integer/parseInt %) (rest coord))]
-        {id (for [i (range x (+ x w)) ;; recur
-                  j (range y (+ y h))] 
-              [i,j])})
-      ))
+(defn get-squares
+  "claim 데이터를 파싱하여 ID와 좌표 정보를 가진 벡터로 반환한다"
+  [claims]
+  (map get-area claims))
 
-(defn get-all-coords
-  "주어진 입력을 격자로 변환한 좌표 리스트를 반환한다."
-  [input]
-  (->> input
-    (map get-matrix)
-    (mapcat vals)
-    (apply concat)))
+(defn generate-points
+  "square 에 포함된 모든 좌표를 생성한다."
+  [{:keys [x y w h]}]
+  (reduce
+   (fn [acc i]
+     (reduce (fn [inner-acc j]
+               (conj inner-acc [i j]))
+             acc
+             (range y (+ y h))))
+   []
+   (range x (+ x w))))
 
-;; (apply concat (mapcat vals (map get-matrix input)))
+(defn generate-all-points
+  "squares 에 포함된 모든 좌표를 생성한다."
+  [squares]
+  (map (fn [{:keys [id coords]}]
+         {:id id
+          :points (generate-points coords)})
+       squares))
+
+(defn calculate-overlaps
+  "겹치는 점을 계산한다."
+  [all-points]
+  (->> all-points
+       (mapcat :points)
+       frequencies))
 
 (defn count-overlap
-  "주어진 격자에서 겹치는 부분의 갯수를 반환한다."
-  [input] 
-    (let [matrix (get-all-coords input)
-          overlap (frequencies matrix)] 
-      (count (filter #(> (second %) 1) overlap))))
+  "겹치는 좌표의 수를 계산한다."
+  [overlap-frequencies]
+  (count (filter #(> (val %) 1) overlap-frequencies)))
 
-(comment
-    (println (count-overlap (read-resource "day3.sample.txt")))
-    )
+(println
+ (->> "day3.sample.txt"
+      read-resource
+      get-squares
+      generate-all-points
+      calculate-overlaps
+      count-overlap))
 
 ;; 파트 2
 ;; 입력대로 모든 격자를 채우고 나면, 정확히 한 ID에 해당하는 영역이 다른 어떤 영역과도 겹치지 않음
 ;; 위의 예시에서는 ID 3 이 ID 1, 2와 겹치지 않음. 3을 출력.
 ;; 겹치지 않는 영역을 가진 ID를 출력하시오. (문제에서 답이 하나만 나옴을 보장함)
 
-(defn find-independent-id
-  "주어진 격자에서 겹치지 않는 ID를 반환한다."
+(defn find-independent-area
+  "겹치지 않는 ID를 찾음."
   [input]
-  (let [matrix_overlab (frequencies (get-all-coords input))
-        single-points (keys (filter #(= (second %) 1) matrix_overlab))
-        matrixies (map get-matrix input)]
-    (loop [[f & remaining] matrixies]
-      (when (some? f)
-        (if (set/subset? (set (first (vals f))) (set single-points))
-          f
-          (recur remaining))))))
+  (let [parsed (get-squares input)
+        all-coords (generate-all-points parsed)
+        overlaps (calculate-overlaps all-coords)
+        non-overlap-points (->> overlaps
+                                (filter #(= (val %) 1))
+                                (map key)
+                                set)]
+    (->> all-coords
+         (filter (fn [{:keys [id points]}]
+                   (set/subset? (set points) non-overlap-points)))
+         first
+         :id)))
 
 (comment
-    (println (find-independent-id (read-resource "day3.sample.txt")))
+    (println (find-independent-area (read-resource "day3.sample.txt")))
     )
