@@ -210,3 +210,35 @@
 
 ;; 파트 2
 ;; 주어진 분(minute)에 가장 많이 잠들어 있던 가드의 ID과 그 분(minute)을 곱한 값을 구하라.
+
+(defn find-most-frequent-minute-per-guard
+  [sleep-data-by-guard]
+  (into {}
+        (map (fn [[guard-id {:keys [periods]}]]
+               [guard-id (if (seq periods)
+                           (->> periods
+                                (map (fn [[start end]] (range start end)))
+                                (apply concat)
+                                frequencies
+                                (apply max-key val)
+                                (fn [[minute freq]] {:minute minute, :frequency freq}))
+                           {:minute nil, :frequency 0})])
+             sleep-data-by-guard)))
+
+
+(defn find-guard-most-frequent-minute
+  "모든 가드 중 가장 자주 잠든 분(minute)을 찾고, 그 가드의 ID와 분을 반환한다."
+  [most-frequent-minutes]
+  (apply max-key (comp :frequency val) most-frequent-minutes))
+
+(comment
+  (println
+   (->> sample-log
+        (parse-log)
+        (sort-log)
+        (compose-logs-by-guard)
+        (calculate-sleep-data-by-guard)
+        (find-most-frequent-minute-per-guard)
+        (find-guard-most-frequent-minute)
+        ((fn [[guard-id {:keys [minute]}]]
+           (* guard-id minute))))))
