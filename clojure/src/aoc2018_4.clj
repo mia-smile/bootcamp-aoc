@@ -36,23 +36,23 @@
 ;; 5. 가장 오랜 시간 잠든 가드가 빈번하게 잠든 시간대를 찾는다.
 ;; 6. 결과를 출력한다.
 
-(def sample-log ["[1518-11-01 00:00] Guard #10 begins shift"
+(def sample-log ["[1518-11-05 00:55] wakes up"
                  "[1518-11-01 00:05] falls asleep"
-                 "[1518-11-01 00:25] wakes up"
-                 "[1518-11-01 00:30] falls asleep"
-                 "[1518-11-01 00:55] wakes up"
-                 "[1518-11-01 23:58] Guard #99 begins shift"
-                 "[1518-11-02 00:40] falls asleep"
+                 "[1518-11-01 00:25] wakes up" 
+                 "[1518-11-01 23:58] Guard #99 begins shift" 
                  "[1518-11-02 00:50] wakes up"
                  "[1518-11-03 00:05] Guard #10 begins shift"
-                 "[1518-11-03 00:24] falls asleep"
-                 "[1518-11-03 00:29] wakes up"
+                 "[1518-11-01 00:30] falls asleep"
+                 "[1518-11-02 00:40] falls asleep"
+                 "[1518-11-01 00:55] wakes up" 
                  "[1518-11-04 00:02] Guard #99 begins shift"
                  "[1518-11-04 00:36] falls asleep"
+                 "[1518-11-03 00:24] falls asleep"
+                 "[1518-11-03 00:29] wakes up"
                  "[1518-11-04 00:46] wakes up"
                  "[1518-11-05 00:03] Guard #99 begins shift"
                  "[1518-11-05 00:45] falls asleep"
-                 "[1518-11-05 00:55] wakes up"])
+                 "[1518-11-01 00:00] Guard #10 begins shift"])
 
 (def log-format #"\[(\d+)-(\d+)-(\d+) (\d+):(\d+)\] (.+)")
 
@@ -196,9 +196,9 @@
 
 (comment
   (println
-   (-> "day4.sample.txt"
-       (read-resource)
-;;     (-> sample-log
+;   (-> "day4.sample.txt"
+;       (read-resource)  
+    (-> sample-log
        (parse-log)
        (sort-log)
        (compose-logs-by-guard)
@@ -212,17 +212,18 @@
 ;; 주어진 분(minute)에 가장 많이 잠들어 있던 가드의 ID과 그 분(minute)을 곱한 값을 구하라.
 
 (defn find-most-frequent-minute-per-guard
+  "각 가드별로 가장 자주 잠든 분과 해당 빈도를 반환한다.
+   {10 {:minute 24, :frequency 3},
+    99 {:minute 45, :frequency 2}}"
   [sleep-data-by-guard]
   (into {}
         (map (fn [[guard-id {:keys [periods]}]]
-               [guard-id (if (seq periods)
-                           (->> periods
-                                (map (fn [[start end]] (range start end)))
-                                (apply concat)
-                                frequencies
-                                (apply max-key val)
-                                (fn [[minute freq]] {:minute minute, :frequency freq}))
-                           {:minute nil, :frequency 0})])
+               [guard-id (let [[minute freq] (->> periods
+                                                  (map (fn [[start end]] (range start end)))
+                                                  (apply concat)
+                                                  frequencies
+                                                  (apply max-key val))]
+                           {:minute minute, :frequency freq})])
              sleep-data-by-guard)))
 
 
@@ -233,7 +234,9 @@
 
 (comment
   (println
-   (->> sample-log
+;   (-> "day4.sample.txt"
+;       (read-resource)  
+    (-> sample-log
         (parse-log)
         (sort-log)
         (compose-logs-by-guard)
