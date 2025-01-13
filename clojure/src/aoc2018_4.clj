@@ -123,22 +123,27 @@
         {:year 1518, :month 11, :day 5, :hour 0, :minute 45, :action \"falls asleep\"}
         {:year 1518, :month 11, :day 5, :hour 0, :minute 55, :action \"wakes up\"}]}"
   [logs]
-  (loop [remaining-logs logs
-         current-guard nil
-         result {}]
-    (if (empty? remaining-logs)
-      result
-      (let [log (first remaining-logs)
-            new-guard (extract-guard-id log)
-            guard-id (or new-guard current-guard)]
-        (when guard-id
-          (recur (rest remaining-logs)
-                 guard-id
-                 (update result guard-id #(conj (or % []) log))))))))
+  (let [add-guard-ids
+         (fn [logs]
+           (loop [remaining-logs logs
+                  current-guard nil
+                  result []]
+             (if (empty? remaining-logs)
+               result
+               (let [log (first remaining-logs)
+                     new-guard (extract-guard-id log)
+                     guard-id (or new-guard current-guard)
+                     updated-log (assoc log :guard-id guard-id)]
+                 (recur (rest remaining-logs)
+                        guard-id
+                        (conj result updated-log))))))]
+     (->> logs
+          add-guard-ids
+          (group-by :guard-id))))
 
 (defn calculate-sleep-data
   "한 명의 가드 로그를 받아 수면 데이터를 계산한다.
-  {:periods [[5 25] [30 55]], :total-sleep-time 45, :status \"w\"}"
+  {:periods [[5 25] [30 55]], :total-sleep-time 45, :status :w}"
   [guard-logs]
   (reduce
    (fn [result log]
@@ -147,28 +152,28 @@
            status (:status result)]
        (case [status action]
          ;; 깨어있는 상태에서 잠드는 경우
-         ["w" "falls asleep"]
-         (assoc result :start minute :status "f")
+         [:w "falls asleep"]
+         (assoc result :start minute :status :f)
 
          ;; 잠든 상태에서 깨어나는 경우
-         ["f" "wakes up"]
+         [:f "wakes up"]
          (if-let [start (:start result)]
            (-> result
                (update :periods conj [start minute])
                (update :total-sleep-time + (- minute start))
-               (assoc :status "w")
+               (assoc :status :w)
                (dissoc :start))
            result)
 
          ;; 그 외의 경우 상태 유지
          result)))
-   {:periods [] :total-sleep-time 0 :status "w"}
+   {:periods [] :total-sleep-time 0 :status :w}
    guard-logs))
 
 (defn calculate-sleep-data-by-guard
   "가드별로 수면 데이터를 계산한다.
-   {10 {:periods [[5 25] [30 55]], :total-sleep-time 45, :status \"w\"},
-    99 {:periods [[40 50]], :total-sleep-time 10, :status \"w\"}}"
+   {10 {:periods [[5 25] [30 55] [24 29]], :total-sleep-time 50, :status :w},
+    99 {:periods [[40 50] [36 46] [45 55]], :total-sleep-time 30, :status :w}}"
   [logs-by-guard]
   (into {} (map (fn [[guard-id logs]]
                   [guard-id (calculate-sleep-data logs)]) 
@@ -191,16 +196,17 @@
 
 (comment
   (println
-   (->> "day4.sample.txt"
-        (read-resource)
-        (parse-log)
-        (sort-log)
-        (compose-logs-by-guard)
-        (calculate-sleep-data-by-guard)
-        (find-longest-sleeping-guard)
-        ((fn [[guard-id guard-data]]
-           (->> (find-most-frequent-sleep-minute guard-data)
-                (* guard-id)))))))
+   (-> "day4.sample.txt"
+       (read-resource)
+;;     (-> sample-log
+       (parse-log)
+       (sort-log)
+       (compose-logs-by-guard)
+       (calculate-sleep-data-by-guard)
+       (find-longest-sleeping-guard)
+       ((fn [[guard-id guard-data]]
+          (->> (find-most-frequent-sleep-minute guard-data)
+               (* guard-id)))))))
 
 ;; 파트 2
 ;; 주어진 분(minute)에 가장 많이 잠들어 있던 가드의 ID과 그 분(minute)을 곱한 값을 구하라.
