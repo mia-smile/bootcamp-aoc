@@ -94,7 +94,7 @@
   "주어진 로그 리스트를 정렬한다."
   [logs]
   (sort-by (fn [{:keys [year month day hour minute]}]
-             [year month day minute hour])
+             [year month day hour minute])
            logs))
 
 (defn extract-guard-id
@@ -196,9 +196,9 @@
 
 (comment
   (println
-;   (-> "day4.sample.txt"
-;       (read-resource)  
-    (-> sample-log
+   (-> "day4.sample.txt"
+       (read-resource)  
+;    (-> sample-log
        (parse-log)
        (sort-log)
        (compose-logs-by-guard)
@@ -211,21 +211,30 @@
 ;; 파트 2
 ;; 주어진 분(minute)에 가장 많이 잠들어 있던 가드의 ID과 그 분(minute)을 곱한 값을 구하라.
 
+(defn default-periods
+  "기본 수면 데이터를 생성한다."
+  [periods]
+  (if (empty? periods)
+    [[0 1]]
+    periods))
+
+(defn- get-frequences [[guard-id {:keys [periods]}]]
+  (let [[minute freq] (->> periods 
+                           default-periods
+                           (map (fn [[start end]] (range start end)))
+                           (apply concat)
+                           (frequencies)
+                           (apply max-key val))]
+    [guard-id {:minute minute, :frequency freq}]))
+
 (defn find-most-frequent-minute-per-guard
   "각 가드별로 가장 자주 잠든 분과 해당 빈도를 반환한다.
    {10 {:minute 24, :frequency 3},
     99 {:minute 45, :frequency 2}}"
   [sleep-data-by-guard]
-  (into {}
-        (map (fn [[guard-id {:keys [periods]}]]
-               [guard-id (let [[minute freq] (->> periods
-                                                  (map (fn [[start end]] (range start end)))
-                                                  (apply concat)
-                                                  frequencies
-                                                  (apply max-key val))]
-                           {:minute minute, :frequency freq})])
-             sleep-data-by-guard)))
-
+  (let [sleep-frequencies (map get-frequences
+                               sleep-data-by-guard)]
+  (into {} sleep-frequencies)))
 
 (defn find-guard-most-frequent-minute
   "모든 가드 중 가장 자주 잠든 분(minute)을 찾고, 그 가드의 ID와 분을 반환한다."
@@ -234,14 +243,13 @@
 
 (comment
   (println
-;   (-> "day4.sample.txt"
-;       (read-resource)  
-    (-> sample-log
-        (parse-log)
-        (sort-log)
-        (compose-logs-by-guard)
-        (calculate-sleep-data-by-guard)
-        (find-most-frequent-minute-per-guard)
-        (find-guard-most-frequent-minute)
-        ((fn [[guard-id {:keys [minute]}]]
-           (* guard-id minute))))))
+   (-> "day4.sample.txt"
+       (read-resource) 
+       (parse-log)
+       (sort-log)
+       (compose-logs-by-guard)
+       (calculate-sleep-data-by-guard)
+       (find-most-frequent-minute-per-guard)
+       (find-guard-most-frequent-minute)
+       ((fn [[guard-id {:keys [minute]}]]
+          (* guard-id minute))))))
