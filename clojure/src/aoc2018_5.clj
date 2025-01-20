@@ -33,7 +33,8 @@
       (read-resource)
       (first)
       (react-polymer-seq)
-      (count)))
+      (count))
+  )
 
 
 ;; 주어진 input 에서 최종으로 남는 문자열을 리턴하시오.
@@ -58,11 +59,12 @@
 (defn shortest-polymer-length
   "주어진 문자열에서 모든 유닛을 하나씩 제거한 후 반응시켰을 때, 가장 짧은 문자열의 길이를 반환한다."
   [s]
-  (let [unique-units (set (map #(String/LowCase %) s))
+  (let [unique-units (set (map #(Character/toLowerCase %) s))
         simulate-one' (partial simulate-one s)]
     (->> unique-units
          (map simulate-one')
          (apply min))))
 
 (comment
-  (shortest-polymer-length (first (read-resource "day5.sample.txt"))))
+  (shortest-polymer-length (first (read-resource "day5.sample.txt")))
+  )
