@@ -1,5 +1,7 @@
 (ns aoc2018-6
-  (:require [utils :refer [read-resource]]))
+  (:require
+   [clojure.string :as string]
+   [utils :refer [read-resource]]))
 
 ;; 파트 1
 ;; 입력 : 좌표의 쌍이 N개 주어짐
@@ -51,15 +53,17 @@
 (def sample-coordinates ["1, 1" "1, 6" "8, 3" "3, 4" "5, 5" "8, 9"])
 
 (defn parse-coordinates
-  "좌표 문자열 리스트를 [x y] 형태의 숫자 리스트로 변환한다."
+  "좌표 문자열 리스트를 [x y] 형태의 숫자 리스트로 변환한다.
+   ([1 1] [1 6] [8 3] [3 4] [5 5] [8 9])"
   [coordinates]
   (map (fn [coord]
-         (let [[x y] (map #(Integer. %) (clojure.string/split coord #", "))]
+         (let [[x y] (map #(parse-long %) (string/split coord #", "))]
            [x y]))
        coordinates))
 
 (defn calculate-boundaries
-  "좌표의 최소 및 최대 경계를 계산한다."
+  "좌표의 최소 및 최대 경계를 계산한다.
+   {:x-min 1, :x-max 8, :y-min 1, :y-max 9}"
   [coordinates] 
   {:x-min (apply min (map first coordinates))
    :x-max (apply max (map first coordinates))
@@ -69,8 +73,8 @@
 (defn manhattan-distance
   "맨해튼 거리 계산"
   [x1 y1 x2 y2]
-  (+ (Math/abs (- x1 x2))
-     (Math/abs (- y1 y2))))
+  (+ (abs (- x1 x2))
+     (abs (- y1 y2))))
 
 (defn closest-coordinate
   "좌표 (x, y)에서 가장 가까운 좌표를 계산한다.
@@ -96,7 +100,8 @@
           (for [y (range y-min (inc y-max))]
             [[x-min y] [x-max y]]))
          (mapcat identity)
-         (map (fn [[x y]] (closest-coordinate x y coordinates)))
+         (map (fn [[x y]]
+                (closest-coordinate x y coordinates)))
          (remove nil?)
          set)))
 
@@ -110,10 +115,10 @@
 
 (defn calculate-finite-areas
   "유한 영역의 크기를 계산한다."
-  [boundaries coordinates infinite-set] 
+  [boundaries coordinates infinite-set?] 
   (let [closest-coordinates (calculate-closest-coordinates boundaries coordinates)] 
     (->> closest-coordinates
-         (remove #(contains? infinite-set %))
+         (remove infinite-set?)
          frequencies)))
 
 (defn find-largest-finite-area
@@ -127,8 +132,9 @@
          vals
          (apply max))))
 
-(comment
-  (find-largest-finite-area (read-resource "day6.sample.txt"))
+(comment 
+  #_(find-largest-finite-area sample-coordinates) 
+  (time (find-largest-finite-area (read-resource "day6.sample.txt")))
   )
 
 ;; 파트 2
@@ -166,20 +172,11 @@
    0
    coordinates))
 
-(defn calculate-reduced-boundaries
-  "모든 좌표로부터 max-distance 내에 포함될 수 있는 최소-최대 경계를 계산한다."
-  [coordinates max-distance]
-  (let [x-min (- (apply min (map first coordinates)) max-distance)
-        x-max (+ (apply max (map first coordinates)) max-distance)
-        y-min (- (apply min (map second coordinates)) max-distance)
-        y-max (+ (apply max (map second coordinates)) max-distance)]
-    {:x-min x-min :x-max x-max :y-min y-min :y-max y-max}))
-
 (defn safe-region-size
   "안전 영역의 크기를 계산한다."
   [coordinates max-distance]
   (let [parsed-coordinates (parse-coordinates coordinates)
-        {:keys [x-min x-max y-min y-max]} (calculate-reduced-boundaries parsed-coordinates max-distance)]
+        {:keys [x-min x-max y-min y-max]} (calculate-boundaries parsed-coordinates)]
     (->> (for [x (range x-min (inc x-max))
                y (range y-min (inc y-max))]
            (total-distance x y parsed-coordinates))
@@ -187,5 +184,6 @@
          count)))
 
 (comment
-  (safe-region-size (read-resource "day6.sample.txt") 10000)
+  #_(safe-region-size sample-coordinates 32)
+  (time (safe-region-size (read-resource "day6.sample.txt") 10000))
   )
