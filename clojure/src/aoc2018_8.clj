@@ -1,4 +1,4 @@
-(ns aoc2018-8
+(ns [aoc2018-8 :refer [parse-tree]]
   (:require
    [clojure.string :as string]
    [utils :refer [read-resource]]))
@@ -85,22 +85,27 @@
 ;;  자식 노드: B, C
 ;;  B 노드의 값은 33 (10 + 11 + 12)
 ;;  C 노드의 값은 0
-;;  A 노드의 값은 66 (33 + 0 + 33)
+;;  A 노드의 값은 66 (33 + 33 + 0)
+
+(defn- parse-children
+  "자식 노드들을 재귀적으로 파싱한다."
+  [child-count rest]
+  (loop [n child-count
+         acc []
+         remaining rest]
+    (if (zero? n)
+      [acc remaining]
+      (let [[child new-remaining] (parse-tree remaining)]
+        (recur (dec n) (conj acc child) new-remaining)))))
 
 (defn parse-tree
   "트리 구조를 파싱하여 노드와 다음 위치를 반환한다."
   [nums]
   (let [[child-count metadata-count & rest] nums
-        children (loop [n child-count
-                        acc []
-                        remaining rest]
-                   (if (zero? n)
-                     [acc remaining]
-                     (let [[child new-remaining] (parse-tree remaining)]
-                       (recur (dec n) (conj acc child) new-remaining))))
-        metadata (take metadata-count (second children))
-        remaining (drop metadata-count (second children))]
-    [{:children (first children), :metadata metadata} remaining]))
+        [children remaining-after-children] (parse-children child-count rest)
+        metadata (take metadata-count remaining-after-children)
+        remaining (drop metadata-count remaining-after-children)]
+    [{:children children, :metadata metadata} remaining]))
 
 (defn node-value
   "노드의 값을 계산한다."
