@@ -91,7 +91,9 @@
   "트리 구조를 파싱하여 노드와 다음 위치를 반환한다."
   [nums]
   (let [[child-count metadata-count & rest] nums
-        children (loop [n child-count, acc [], remaining rest]
+        children (loop [n child-count
+                        acc []
+                        remaining rest]
                    (if (zero? n)
                      [acc remaining]
                      (let [[child new-remaining] (parse-tree remaining)]
