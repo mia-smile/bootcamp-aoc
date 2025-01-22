@@ -1,4 +1,4 @@
-(ns [aoc2018-8 :refer [parse-tree]]
+(ns aoc2018-8
   (:require
    [clojure.string :as string]
    [utils :refer [read-resource]]))
@@ -34,8 +34,8 @@
   "입력된 문자열 벡터를 숫자 벡터로 변환한다."
   [data]
   (let [split-strings (string/split (first data) #" ")
-        parsed-numbers (map #(parse-long %) split-strings)]
-    (vec parsed-numbers)))
+        parsed-numbers (mapv #(parse-long %) split-strings)]
+    parsed-numbers))
 
 (defn parse-node
   "트리 구조를 재귀적으로 파싱하여 메타데이터 합과 다음 위치를 반환한다."
@@ -49,22 +49,21 @@
            remaining-children child-count]
       (if (zero? remaining-children)
         (let [metadata (subvec data child-idx (+ child-idx metadata-count))]
-          [(+ child-sum (reduce + metadata))
-           (+ child-idx metadata-count)])
-        (let [[child-sum' next-idx] (parse-node data child-idx)]
-          (recur next-idx
-                 (+ child-sum child-sum')
+          {:meta-sum (+ child-sum (apply + metadata))
+           :child-idx (+ child-idx metadata-count)})
+        (let [{:keys [meta-sum child-idx]} (parse-node data child-idx)]
+          (recur child-idx
+                 (+ child-sum meta-sum)
                  (dec remaining-children)))))))
 
 (defn sum-metadata
   "메타데이터의 총합을 계산한다."
-  [data]
-  (first (parse-node data 0)))
+  [data] 
+  (:meta-sum (parse-node data 0)))
 
 (comment
   (sum-metadata (cast-numbers (read-resource "day8.sample.txt")))
-  (sum-metadata (cast-numbers sample-input))
-  )
+  (sum-metadata (cast-numbers sample-input)))
 
 
 ;; 파트 2
@@ -87,6 +86,7 @@
 ;;  C 노드의 값은 0
 ;;  A 노드의 값은 66 (33 + 33 + 0)
 
+(declare parse-tree)
 (defn- parse-children
   "자식 노드들을 재귀적으로 파싱한다."
   [child-count rest]
@@ -111,8 +111,8 @@
   "노드의 값을 계산한다."
   [{:keys [children metadata]}]
   (if (empty? children)
-    (reduce + metadata)
-    (reduce + (map #(-> (nth children (dec %) nil)
+    (apply + metadata)
+    (apply + (map #(-> (nth children (dec %) nil)
                         (node-value))
                    (filter #(<= 1 % (count children)) metadata)))))
 
@@ -124,5 +124,5 @@
 
 (comment
   (root-node-value (cast-numbers (read-resource "day8.sample.txt")))
-  (root-node-value (cast-numbers sample-input))
-  )
+  (root-node-value (cast-numbers sample-input)))
+  
