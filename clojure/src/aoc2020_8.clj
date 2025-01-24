@@ -49,7 +49,7 @@
   {:idx (inc idx)})
 
 (defn acc
-  "전역 변수를 증가/감소 시킨다."
+  "변수를 증가/감소 시킨다."
   [accumulator, value, idx]
   {:accumulator (+ accumulator value) :idx (inc idx)})
 
@@ -72,7 +72,8 @@
     (case op
       "nop" (nop index)
       "acc" (acc accumulator value index)
-      "jmp" (jmp value index))))
+      "jmp" (jmp value index)
+      ())))
 
 (defn run-instructions
   "입력을 순차적으로 실행한다."
@@ -81,7 +82,7 @@
          idx 0
          run-indexes? #{}]
     (if (or (run-indexes? idx)
-            (= idx (count instructions)))
+            (> idx (count instructions)))
       accumulator
       (let [instrunction (nth instructions idx)
             result (run-instruction accumulator instrunction idx)
@@ -119,7 +120,7 @@
 ;; 2. 직전 지시를 jmp/nop로 바꾼다.
 ;; 3. 끝까지 실행 후 accumulator의 값을 반환한다.
 
-(defn is-candidate
+(defn candidate?
   "jmp 또는 nop 인지 확인한다."
   [instruction]
   (let [{:keys [op _]} (parse-instruction instruction)]
@@ -138,7 +139,7 @@
             new-idx (:idx result)]
         (recur new-idx
                (conj run-indexes idx)
-               (if (is-candidate instrunction)
+               (if (candidate? instrunction)
                  (conj candidates idx)
                  candidates))))))
 
