@@ -34,7 +34,7 @@
   "입력된 문자열 벡터를 숫자 벡터로 변환한다."
   [data]
   (let [split-strings (string/split (first data) #" ")
-        parsed-numbers (mapv #(parse-long %) split-strings)]
+        parsed-numbers (mapv parse-long split-strings)]
     parsed-numbers))
 
 (defn parse-node
