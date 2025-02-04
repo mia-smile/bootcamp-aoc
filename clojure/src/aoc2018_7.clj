@@ -1,5 +1,6 @@
 (ns aoc2018-7
   (:require
+   [clojure.string :as str]
    [utils :refer [read-resource]]))
 
 ;; ## 파트 1
@@ -52,8 +53,8 @@
                    "Step D must be finished before step E can begin."
                    "Step F must be finished before step E can begin."])
 
-(defn parse-input
-  "입력을 파싱해서 그래프 형태로 정리한다"
+(defn build-task-dependencies
+  "주어진 작업 스케줄 입력을 파싱하여 그래프 형태의 의존성 관계를 생성한다."
   [lines]
   (reduce
    (fn [graph line]
@@ -64,68 +65,51 @@
    {}
    lines))
 
-(defn- get-available-steps
-  "그래프에서 선행 조건이 없는 단계를 찾아서 알파벳 순으로 정렬하여 반환한다"
-  [graph completed-steps]
-   (->> graph
-        (filter (fn [[_ reqs]]
-                  (every? completed-steps reqs)))
-        (map key)
-        sort))
-
-(defn- update-graph
-  "그래프에서 특정 단계를 완료 처리하여 해당 단계를 모든 선행 조건에서 제거한다"
-  [next-step graph]
-  (reduce-kv
-   (fn [g k v]
-     (if (v next-step)
-       (update g k disj next-step)
-       g))
-   graph
-   graph))
-
-(defn- get-new-available
-  "다음 단계에서 실행 가능한 새로운 단계들을 계산한다
-     - 입력:
-       - available: 현재 실행 가능한 단계들
-       - completed: 완료된 단계들
-       - updated-graph: 업데이트된 그래프
-     - 처리:
-       1. 선행 조건이 없는 단계들 중 아직 완료되지 않은 단계들을 필터링
-       2. 현재 available에서 처리된 단계를 제거
-       3. 중복 단계를 제거한 후 정렬
-     - 반환: 새로운 available 리스트"
-  [available completed updated-graph]
-  (->> updated-graph
-       (filter (fn [[k v]] (and (empty? v) (not (some #{k} completed)))))
-       (map key)
-       (concat (remove #{(first available)} available))
-       distinct
+(defn find-runnable-tasks
+  "현재 실행할 수 있는 작업들을 찾아 알파벳 순으로 정렬하여 반환한다."
+  [graph completed-tasks]
+  (->> graph
+       (filter (fn [[_ prereqs]] (every? completed-tasks prereqs)))
+       (map first)
        sort))
 
-(defn find-order
-  "그래프에서 순서를 정렬한다"
-  [graph]
-  (let [initial-available (get-available-steps graph #{})]
-    (loop [{:keys [completed available graph]} {:completed [] :available initial-available :graph graph}]
-      (if (empty? available)
-        (apply str completed)
-        (let [next-step (first available)
-              updated-graph (update-graph next-step graph)
-              new-available (get-new-available available (conj completed next-step) updated-graph)]
-          (recur {:completed (conj completed next-step)
-                  :available new-available
-                  :graph (dissoc updated-graph next-step)}))))))
+(defn remove-task-dependency
+  "주어진 작업을 완료 처리하여, 그래프에서 해당 작업을 모든 선행 조건에서 제거한다."
+  [completed-task graph]
+  (reduce-kv
+   (fn [updated-graph task deps]
+     (if (deps completed-task)
+       (update updated-graph task disj completed-task)
+       updated-graph))
+   (dissoc graph completed-task)
+   graph))
 
-(defn assembly-sleigh
-  "썰매를 조립한다"
+(defn determine-task-order
+  "작업 순서를 결정하여 실행 가능한 작업 순서를 리스트로 반환한다."
+  [graph]
+  (reduce
+   (fn [[completed available graph] _]
+     (if (empty? available)
+       (reduced completed)
+       (let [next-task (first available)
+             updated-graph (remove-task-dependency next-task graph)
+             new-available (find-runnable-tasks updated-graph (conj (set completed) next-task))]
+         [(conj completed next-task) new-available updated-graph])))
+   [[] (find-runnable-tasks graph #{}) graph]
+   (range (count graph))))
+
+(defn schedule-tasks
+  "작업 스케줄을 분석하여 실행 순서를 반환한다."
   [input]
   (-> input
-      parse-input
-      find-order))
+      #dbg(build-task-dependencies)
+      #dbg(determine-task-order)
+      #dbg(first)
+      (str/join)))
 
 (comment
-  (assembly-sleigh (read-resource "day7.sample.txt")))
+  (schedule-tasks (read-resource "day7.sample.txt"))
+  (schedule-tasks sample-input))
 
 ;; ## 파트 2
 
@@ -158,66 +142,118 @@
 ;; ```
 ;; 15초가 걸리므로 답은 15
 
+
+;; 1. 입력 데이터를 파싱하여 그래프 형태로 변환한다.
+;; 2. 그래프에서 실행 가능한 초기 작업 리스트를 추출한다.
+;; 3. 병렬 작업 환경에서 각 초마다 가능한 작업을 워커에 할당한다.
+;; 4. 작업을 수행하며, 완료된 작업을 반영하고 새로운 실행 가능한 작업을 추가한다.
+;; 5. 모든 작업이 완료될 때까지 반복하며, 최종 소요 시간을 반환한다.
+
 (defn task-duration
-  "작업 이름(문자)에 기반하여 작업 소요 시간을 계산한다."
-  [task base-time]
-  (+ base-time (- (int (first task)) (int \A) 1)))
+  "각 작업(A-Z)의 수행 시간을 계산한다. 기본 60초 + (A=1, B=2, ..., Z=26).
+   - 문자일 경우: 'A'~'Z' 기준으로 계산
+   - 숫자일 경우: 그대로 반환"
+  [task]
+  (if (number? task)
+    task
+    (+ 60 (- (int (first task)) (int \A) -1))))
 
-(defn assign-workers
-  "가능한 작업들을 작업자들에게 할당한다."
-  [workers available base-time]
-  (reduce
-   (fn [worker-state step]
-     (if (some #(nil? (:task %)) worker-state)
-       (let [worker (first (filter #(nil? (:task %)) worker-state))]
-         (conj (remove #(= worker %) worker-state)
-               (assoc worker :task step :remaining-time (+ base-time (task-duration step 0)))))
-       worker-state))
-   workers
-   available))
+(defn make-workers
+  [count]
+  (repeat count {:status :idle, :curr-step nil, :proc-time 0}))
 
-(defn update-workers
-  "작업자의 상태를 업데이트하여 완료된 작업을 반환한다."
-  [workers]
-  (let [updated-workers
-        (map (fn [worker]
-               (if (:task worker)
-                 (update worker :remaining-time dec)
-                 worker))
-             workers)]
-    {:workers (mapv (fn [worker]
-                      (if (and (:task worker) (zero? (:remaining-time worker)))
-                        (assoc worker :task nil)
-                        worker))
-                    updated-workers)
-     :completed (mapv :task (filter #(and (:task %) (zero? (:remaining-time %))) updated-workers))}))
+(defn idle?
+  "워커 상태가 idle 인지 확인"
+  [{status :status}]
+  (= :idle status))
 
-(defn simulate-with-workers
-  "작업자와 작업 시간을 고려하여 작업을 시뮬레이션한다."
-  [graph base-time num-workers]
-  (loop [graph graph
-         workers (vec (repeat num-workers {:task nil :remaining-time 0}))
-         completed []
-         available (get-available-steps graph #{})
-         time 0]
-    (if (and (empty? available) (every? #(nil? (:task %)) workers))
-      time
-      (let [{:keys [workers completed-steps]} (update-workers workers)
-            updated-graph (reduce update-graph graph completed-steps)
-            new-available (get-available-steps updated-graph (set completed))
-            assigned-workers (assign-workers workers new-available base-time)]
-        (recur updated-graph
-               assigned-workers
-               (concat completed completed-steps)
-               (distinct new-available)
-               (inc time))))))
+(defn assign-next-step
+  "워커의 상태가 :idle 이면 다음 작업을 할당한다."
+  [idle-worker available-step]
+  (if available-step
+    (-> idle-worker
+        (assoc :status :running)
+        (assoc :curr-step available-step))
+    idle-worker))
+
+(defn assign-work
+  "유휴 상태의 워커에게 실행 가능한 작업을 할당한다."
+  [available-tasks workers]
+  #dbg(let [idle-workers (filter idle? workers)
+            tasks-to-assign (take (count idle-workers) available-tasks)
+            remaining-tasks (drop (count idle-workers) available-tasks)
+            updated-workers (map (fn [w step] (if (idle? w) (assign-next-step w step) w))
+                                  workers
+                                  (concat tasks-to-assign (repeat nil)))]
+        (println updated-workers)
+        {:workers updated-workers
+         :remaining-tasks remaining-tasks}))
+
+(defn update-task-timers
+  "각 워커의 진행 중인 작업 시간을 1초씩 감소하고 완료된 작업을 찾는다."
+  [workers task-timers]
+  (let [updated-timers (map #(when % (dec %)) task-timers)
+        completed-now (keep-indexed #(when (zero? %2) (:curr-step (nth workers %1))) updated-timers)]
+    {:updated-timers updated-timers
+     :completed-now completed-now}))
+
+(defn remove-completed-tasks
+  "완료된 작업을 그래프에서 제거하고, 새로운 실행 가능한 작업을 찾는다."
+  [graph completed-tasks completed]
+  (let [updated-graph (reduce remove-task-dependency graph completed)
+        new-available (find-runnable-tasks updated-graph (set (concat completed completed-tasks)))]
+    {:updated-graph updated-graph
+     :new-available new-available}))
+
+(defn update-worker-assignments
+  "새로운 작업을 할당하고, 작업 타이머를 갱신한다."
+  [available-tasks workers]
+  (let [{:keys [workers remaining-tasks]} (assign-work available-tasks workers)
+        new-task-timers (map #(when (:curr-step %) (task-duration (:curr-step %))) workers)]
+    {:workers workers
+     :task-timers new-task-timers
+     :remaining-tasks remaining-tasks}))
+
+(defn simulate-work
+  "각 초마다 워커들의 작업 상태를 업데이트하고, 완료된 작업을 반영한다."
+  [{:keys [workers task-timers completed graph elapsed-time]}]
+  (let [{:keys [updated-timers completed-now]} (update-task-timers workers task-timers)
+        {:keys [updated-graph new-available]} (remove-completed-tasks graph completed completed-now)
+        updated-workers (map (fn [w]
+                                (if (some #{(:curr-step w)} completed-now)
+                                  (assoc w :status :idle :curr-step nil)
+                                  w))
+                              workers)
+        {:keys [workers task-timers]} (update-worker-assignments new-available updated-workers)]
+    {:workers workers
+     :task-timers task-timers
+     :completed (concat completed completed-now)
+     :graph updated-graph
+     :elapsed-time (inc elapsed-time)}))
 
 (defn calculate-total-time
-  "전체 작업을 처리하는 데 걸리는 총 시간을 계산한다."
-  [input base-time num-workers]
-  (let [graph (parse-input input)]
-    (simulate-with-workers graph base-time num-workers)))
+  "모든 작업을 완료하는 데 걸리는 총 시간을 계산한다."
+  [graph num-workers]
+  #dbg(let [initial-available (find-runnable-tasks graph #{})
+        {:keys [workers remaining-tasks]} (assign-work initial-available (vec (make-workers num-workers )))
+        initial-task-timers (map #(when % (task-duration %)) workers)]
+    (->> (iterate simulate-work
+                  {:workers workers
+                   :task-timers initial-task-timers
+                   :completed []
+                   :graph graph
+                   :elapsed-time 0})
+         (drop-while #(not-empty (:graph %)))
+         first
+         :elapsed-time)))
+
+(defn schedule-tasks-with-workers
+  "주어진 작업 스케줄을 분석하여 총 작업 시간을 반환한다."
+  [input num-workers]
+  (-> input
+      (build-task-dependencies)
+      (calculate-total-time num-workers)))
 
 (comment
-  (calculate-total-time (read-resource "day7.sample.txt") 60 5)
-  )
+  (schedule-tasks-with-workers (read-resource "day7.sample.txt") 5)
+  (schedule-tasks-with-workers sample-input 2))
