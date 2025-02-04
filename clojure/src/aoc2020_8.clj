@@ -120,49 +120,52 @@
 ;; 2. 직전 지시를 jmp/nop로 바꾼다.
 ;; 3. 끝까지 실행 후 accumulator의 값을 반환한다.
 
-(defn candidate?
-  "jmp 또는 nop 인지 확인한다."
+(defn swap-instruction
+  "nop <> jmp 변경"
   [instruction]
-  (let [{:keys [op _]} (parse-instruction instruction)]
-    (or (= op "jmp") (= op "nop"))))
+  (let [{:keys [op value]} (parse-instruction instruction)]
+    (cond
+      (= op "nop") (str "jmp " value)
+      (= op "jmp") (str "nop " value)
+      :else instruction)))
 
-(defn find-infinite-loop
-  "무한 루프의 시작점을 찾는다."
+(defn modify-instruction-at
+  "지정된 index의 nop <> jmp 를 변경한 새로운 지시 리스트 반환"
+  [instructions idx]
+  (map-indexed (fn [i instr]
+                 (if (= i idx)
+                   (swap-instruction instr)
+                   instr))
+               instructions))
+
+(defn run-instructions-until-end
+  "입력을 실행하고, 정상 종료 시 accumulator 값을 반환"
   [instructions]
-  (loop [idx 0
-         run-indexes []
-         candidates []]
-    (if (some #(= % idx) run-indexes)
-      (apply max candidates)
-      (let [instrunction (nth instructions idx)
-            result (run-instruction 0 instrunction idx)
-            new-idx (:idx result)]
-        (recur new-idx
-               (conj run-indexes idx)
-               (if (candidate? instrunction)
-                 (conj candidates idx)
-                 candidates))))))
+  (loop [accumulator 0
+         idx 0
+         run-indexes? #{}]
+    (cond 
+      (>= idx (count instructions)) accumulator 
+      (run-indexes? idx) nil
+      :else
+      (let [instruction (nth instructions idx)
+            result (run-instruction accumulator instruction idx)
+            new-idx (:idx result)
+            new-accumulator (get result :accumulator accumulator)]
+        (recur new-accumulator
+               new-idx
+               (conj run-indexes? idx))))))
 
-(defn fix-instructions
-  "잘못된 명령어를 수정한다. jmp <-> nop"
-  [idx instructions]
-  (let [[op value] (string/split (nth instructions idx) #" ")]
-    (assoc instructions idx (if (= op "jmp")
-                              (str "nop " value)
-                              (str "jmp " value)))))
-
-(def real-input (read-resource "day8-2020.sample.txt"))
-
-(defn debug [value name]
-  (println (str name " " value))
-  value
-  )
+(defn find-correct-instruction
+  "하나씩 jmp <> nop을 변경하며 정상 종료되는 경우 찾기"
+  [instructions]
+  (some (fn [idx]
+          (let [modified-instructions (modify-instruction-at instructions idx)
+                result (run-instructions-until-end modified-instructions)]
+            (when result result)))
+        (range (count instructions))))
 
 (comment
-  (-> real-input
-      (find-infinite-loop)
-      #_(debug "find-infinite-loop")
-      (fix-instructions real-input)
-      #_(debug "fix-instructions")
-      (run-instructions))
+  (find-correct-instruction (read-resource "day8-2020.sample.txt"))
+  (find-correct-instruction sample-input)
   )
